@@ -1,0 +1,76 @@
+{% extends 'base.html' %}{% block body %}
+<section class="panel">
+  <div class="panel-head"><h2>$ period --watermark</h2><span>{{periods|length}} 个账期</span></div>
+  <div class="output-scroll"><table><thead><tr><th>#</th><th>账期</th><th>状态</th><th>账单版本</th><th>原账/当前金额</th><th>会话</th><th>计费分</th><th>水位分片</th><th>水位摘要</th><th>上期结转</th><th>出账时间</th></tr></thead><tbody>
+  {% for p in periods %}
+  <tr data-period="{{p.period_id}}" class="period-row {{'state-'+p.state}}">
+    <td class="line-no">{{'%03d'|format(loop.index)}}</td>
+    <td class="num"><a href="#" class="period-link">{{p.period_id}}</a></td>
+    <td><span class="badge badge-{{p.state}}">{{ {'open':'未出账','issued':'已出账','closed':'已关闭'}[p.state] }}</span></td>
+    {% if p.latest_bill %}
+    <td class="num">v{{p.latest_bill.version}}</td>
+    <td class="num">{{p.latest_bill.summary.total_fee}} CNY</td>
+    <td class="num">{{p.latest_bill.summary.sessions}}</td>
+    <td class="num">{{p.latest_bill.summary.minutes}}</td>
+    <td class="num">{{p.latest_bill.watermark.fragment_count}}</td>
+    <td class="digest" title="{{p.latest_bill.watermark.fragment_digest}}">{{p.latest_bill.watermark.fragment_digest[:12]}}… / {{p.latest_bill.watermark.supplements|length}} 补片</td>
+    {% else %}
+    <td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="digest">—</td>
+    {% endif %}
+    <td class="num">{{p.adjustment_count}} 行 / {{p.adjustment_total}} CNY</td>
+    <td>{{p.issued_at or '—'}}</td>
+  </tr>
+  {% else %}<tr><td colspan="11" class="empty">[EMPTY] 尚未建立账期，点击下方建立初始账</td></tr>{% endfor %}
+  </tbody></table></div>
+  <div class="commandbar">
+    <label>初始账期<input id="seed-period" value="2026-11-02" size="12"></label>
+    <button id="seed-btn" class="btn primary">[ 从样例建立原账 ]</button>
+    <a class="btn" href="/api/ledger/export/periods">[ 导出账期水位 CSV ]</a>
+    <a class="btn" href="/api/ledger/export/supplements">[ 导出补片台账 CSV ]</a>
+  </div>
+</section>
+
+<div class="grid bottom-grid">
+  <section class="panel">
+    <div class="panel-head"><h2>$ supplement --receive</h2><span>跨零点补片</span></div>
+    <div class="panel-body">
+      <textarea id="supp-text" rows="6" placeholder="粘贴补片CSV（带表头），或载入演示补片"></textarea>
+      <div class="commandbar">
+        <label>决策<select id="decision"><option value="">按账期状态自动</option><option value="reopen">重开原账 reopen</option><option value="carry">结转下期 carry</option></select></label>
+        <button id="supp-send" class="btn primary">[ 接收补片 ]</button>
+        <button id="supp-demo" class="btn">[ 载入跨零点演示补片 ]</button>
+        <button id="issue-btn" class="btn">[ 出账当前账期 ]</button>
+      </div>
+      <div id="ledger-feedback" class="terminal-output" role="status" aria-live="polite"></div>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>$ supplement --ledger</h2><span>{{supplements|length}} 条原始记录</span></div>
+    <div class="output-scroll"><table><thead><tr><th>摘要</th><th>账期</th><th>输入/有效/重复/隔离</th><th>状态</th><th>决策</th><th>版本</th><th>原始分片</th></tr></thead><tbody>
+    {% for s in supplements %}
+    <tr><td class="digest" title="{{s.digest}}">{{s.digest[:10]}}…</td><td class="num">{{s.period_id}}</td>
+      <td class="num">{{s.input_rows}} / {{s.accepted_rows}} / {{s.duplicate_rows}} / {{s.quarantined_rows}}</td>
+      <td><span class="badge badge-{{s.state|lower}}">{{ {'RECEIVED':'已接收','APPLIED':'已应用','DUPLICATE':'重复拒收','REJECTED':'校验拒收'}[s.state] }}</span></td>
+      <td>{{ {'reopen':'重开原账','carry':'结转下期'}.get(s.decision,'—') }}{% if s.reason %}<br><span class="bad">{{s.reason}}</span>{% endif %}</td>
+      <td class="num">{{s.bill_version or '—'}}</td>
+      <td><a href="/api/ledger/supplements/{{s.digest}}/raw">下载原始CSV</a></td></tr>
+    {% else %}<tr><td colspan="7" class="empty">[EMPTY] 暂无补片</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+</div>
+
+<section class="panel" id="detail-panel" hidden>
+  <div class="panel-head"><h2>$ audit --period <span id="detail-title"></span></h2><span id="detail-state"></span></div>
+  <div class="panel-body">
+    <div class="kpis" id="detail-kpis"></div>
+    <h3 class="subhead">原账 → 重算结果与差额来源</h3>
+    <div class="output-scroll"><table id="delta-table"><thead><tr><th>会话</th><th>原账金额</th><th>重算金额</th><th>差额</th><th>原有效秒→新有效秒</th><th>原计费分→新计费分</th><th>差额来源</th></tr></thead><tbody></tbody></table></div>
+    <h3 class="subhead">结转下期调整行</h3>
+    <div class="output-scroll"><table id="adj-table"><thead><tr><th>目标账期</th><th>来源账期</th><th>会话</th><th>金额</th><th>来源</th></tr></thead><tbody></tbody></table></div>
+    <div class="commandbar">
+      <a class="btn" id="delta-export" href="#">[ 导出该账期差额 CSV ]</a>
+    </div>
+  </div>
+</section>
+<script src="/static/ledger.js" defer></script>
+{% endblock %}

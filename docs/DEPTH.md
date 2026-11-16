@@ -12,6 +12,7 @@
 | M5 坏单隔离 | 筛查拒收原因与原始证据 | `/quarantine`、`/api/quarantine` | `app/modules/quarantine/diagnose.py` `app/modules/quarantine/service.py` | `tests/test_quarantine.py` |
 | M6 账单勾稽 | 计费金额与供应商账单逐会话对照 | `/reconcile`、`/api/reconcile` | `app/modules/reconcile/compare.py` `app/modules/reconcile/service.py` | `tests/test_reconcile.py` |
 | M7 批次复核 | 摘要幂等归档与版本复核 | `/batches`、`/api/batches` | `app/modules/batches/review.py` `app/modules/batches/service.py` | `tests/test_batches.py` |
+| M8 补片台账 | 跨零点补片重开原账或结转下期，维护分片水位与差额来源 | `/ledger`、`/api/ledger` | `app/modules/ledger/service.py` `app/modules/ledger/store.py` | `tests/test_ledger.py` `tests/test_ledger_api.py` |
 
 ## 陷阱登记
 | TRAP | 现象 | 朴素实现会怎样 | 本项目处理 | 处理位置 | 测试 |
@@ -26,6 +27,10 @@
 | TRAP-23 | 相邻端点 | 重复计费或任意选择数据 | 确定性拒收并保留逐行来源 | `app/modules/model/stitch.py` | `tests/test_model.py::test_adjacent_half_open` |
 | TRAP-25 | 资费版本重叠 | 重复计费或任意选择数据 | 确定性拒收并保留逐行来源 | `app/modules/calculate/tariff.py` | `tests/test_calculate.py::test_overlapping_version` |
 | TRAP-26 | 陈旧复核 | 重复计费或任意选择数据 | 确定性拒收并保留逐行来源 | `app/modules/batches/service.py` | `tests/test_batches.py::test_stale_review` |
+| TRAP-30 | 同一补片重复到达 | 重复累计金额与分片 | 原文SHA256+分片指纹双层幂等，重复返回DUPLICATE不追加版本 | `app/modules/ledger/service.py` | `tests/test_ledger.py::test_duplicate_supplement_bytes_never_accumulates` |
+| TRAP-31 | 已出账补片反复跳变 | 原账被反复改写 | open可重开版本，issued/closed只结转下期且原版本不动 | `app/modules/ledger/service.py` | `tests/test_ledger.py::test_issued_period_carries_forward_keeps_original` |
+| TRAP-32 | 重开会丢失已计费会话 | 隔离会话导致金额静默蒸发 | 不安全重开回退结转，差额以-0.40形式显式登记 | `app/modules/ledger/service.py` | `tests/test_ledger.py::test_unsafe_reopen_falls_back_to_carry_and_keeps_version` |
+| TRAP-33 | 切换中途失败 | 半写账单或丢失原分片 | 独立连接+事务回滚，原版本保留、原始补片与水位不丢 | `app/modules/ledger/store.py` | `tests/test_ledger.py::test_switch_failure_rolls_back_previous_version` |
 
 ## 对账规则
 输入分片=计费会话中的有效分片+隔离分片+空行。原始去重分片秒=并集有效秒+重叠剔除秒。供应商金额减重算金额逐会话解释；无法匹配的账单单列，不自动当作零。

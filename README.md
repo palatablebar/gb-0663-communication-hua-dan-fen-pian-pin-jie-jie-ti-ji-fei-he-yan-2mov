@@ -1,6 +1,6 @@
 # 通信话单分片拼接与阶梯计费核验
 
-为通信结算分析员提供话单接收、资费契约、分片拼接、计费重算、坏单隔离、账单勾稽和批次复核七个模块。区间并集后按会话向上取整分钟，排除重复与间隙；资费按生效版本分阶梯计算，Decimal精确到分。
+为通信结算分析员提供话单接收、资费契约、分片拼接、计费重算、坏单隔离、账单勾稽、补片台账和批次复核八个模块。区间并集后按会话向上取整分钟，排除重复与间隙；资费按生效版本分阶梯计算，Decimal精确到分。补片台账按账期维护分片水位，决定补片重开原账还是结转下期，并保留原账、重算版本与差额来源。
 
 ## 启动
 
@@ -19,6 +19,9 @@ docker compose exec -T app pytest -q
 3. 切换脏话单，C00001冲突整会话隔离、C00090缺序隔离。
 4. 账单勾稽逐会话比较供应商费用，缺账单保持未知。
 5. 重跑不追加批次；复核使用当前版本，旧版请求返回409。
+6. 补片台账页建立原账后可载入跨零点演示补片：未出账重开原账生成v2并逐会话登记差额；出账后同补片改为结转2026-11-03，原账v1不变；重复提交返回重复拒收不累计。
+
+补片台账SQLite表（periods/fragments/bills/deltas/supplements/adjustments）与批次表同库。三份导出分别为账期水位 `/api/ledger/export/periods`、差额来源 `/api/ledger/export/deltas/{period}`、补片台账 `/api/ledger/export/supplements`，原始补片经 `/api/ledger/supplements/{digest}/raw` 下载。`sample_data/supplement_cross_midnight.csv` 与 `supplement_new_session.csv` 为跨零点演示补片。
 
 SQLite数据保存在records命名卷。执行 `docker compose down`停止服务保留数据；确认演示数据无需保留后可使用 `docker compose down -v`清空本项目记录。
 

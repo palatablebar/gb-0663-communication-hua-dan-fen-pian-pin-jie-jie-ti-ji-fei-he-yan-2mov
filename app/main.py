@@ -6,11 +6,16 @@ from app.config import ROOT
 from app.errors import RuleError
 from app.pipeline import execute,sample_bytes
 from app.modules.batches.service import persist
+from app.modules.ledger import store as ledger_store
+from app.modules.ledger.service import seed_period
 from app import store
 @asynccontextmanager
 async def lifespan(app):
     store.connect().close()
     if store.latest() is None:persist(execute(sample_bytes()))
+    ledger_store.init()
+    if not ledger_store.list_periods():
+        seed_period('2026-11-02',sample_bytes('clean'))
     yield
 app=FastAPI(title='话单拼接与计费核验',lifespan=lifespan)
 app.mount('/static',StaticFiles(directory=str(ROOT/'app/static')),name='static')
@@ -33,4 +38,5 @@ from app.modules.calculate.handler import router as r4
 from app.modules.quarantine.handler import router as r5
 from app.modules.reconcile.handler import router as r6
 from app.modules.batches.handler import router as r7
-for router in (r1,r2,r3,r4,r5,r6,r7):app.include_router(router)
+from app.modules.ledger.handler import router as r8
+for router in (r1,r2,r3,r4,r5,r6,r7,r8):app.include_router(router)
